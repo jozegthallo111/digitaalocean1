@@ -2,7 +2,7 @@ import os
 import time
 import random
 import csv
-import requests
+from tqdm import tqdm
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -21,6 +21,7 @@ WAIT_TIMEOUT = 25
 MAX_RETRIES = 3
 REQUEST_DELAY = (2, 5)
 CSV_FILE_PATH = "yugioh_cards.csv"
+URLS_FILE_PATH = "fetched_urls.csv"
 
 
 def create_driver():
@@ -209,23 +210,37 @@ def main():
     buffer = []
     first_write = True  # to write header only once
 
-    for url in all_card_urls:
-        if url in scraped_data:
-            print(f"Skipping already scraped card: {url}")
-            buffer.append(scraped_data[url])
-        else:
-            print(f"Scraping card: {url}")
-            card_info = scrape_card_data(driver, url)
-            if card_info:
-                buffer.append(card_info)
-            time.sleep(random.uniform(*REQUEST_DELAY))
+    # Check if URLs file exists
+    urls_file_exists = os.path.exists(URLS_FILE_PATH)
 
-        if len(buffer) >= batch_size:
-            save_scraped_data_batch(buffer, write_header=first_write)
-            first_write = False
-            buffer.clear()
+    # Open URLs file in append mode
+    with open(URLS_FILE_PATH, 'a', newline='', encoding='utf-8') as url_file:
+        url_writer = csv.writer(url_file)
+        if not urls_file_exists:
+            url_writer.writerow(["Card URL"])
 
-    # Save remaining cards in buffer
+        # Progress bar for scraping cards
+        for url in tqdm(all_card_urls, desc="Scraping Yu-Gi-Oh! Cards"):
+            # Save URL immediately on fetch start
+            url_writer.writerow([url])
+            url_file.flush()
+
+            if url in scraped_data:
+                print(f"Skipping already scraped card: {url}")
+                buffer.append(scraped_data[url])
+            else:
+                print(f"Scraping card: {url}")
+                card_info = scrape_card_data(driver, url)
+                if card_info:
+                    buffer.append(card_info)
+                time.sleep(random.uniform(*REQUEST_DELAY))
+
+            if len(buffer) >= batch_size:
+                save_scraped_data_batch(buffer, write_header=first_write)
+                first_write = False
+                buffer.clear()
+
+    # Save remaining cards
     if buffer:
         save_scraped_data_batch(buffer, write_header=first_write)
 
